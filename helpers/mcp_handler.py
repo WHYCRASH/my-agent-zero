@@ -1142,13 +1142,21 @@ class MCPConfig(BaseModel):
             return tools
 
     def get_tools_prompt(self, server_name: str = "") -> str:
-        """Get a prompt for all tools"""
+        """Get a compact prompt for all tools.
+
+        Full JSON input schemas and usage templates are injected in the function
+        registry; this section only lists the tools compactly to avoid duplication.
+        """
 
         # just to wait for pending initialization
         with self.__lock:
             pass
 
-        prompt = '## "Remote (MCP Server) Agent Tools" available:\n\n'
+        prompt = '## "Remote (MCP Server) Agent Tools" available:' + chr(10) + chr(10)
+        prompt += (
+            "Full JSON input schemas and usage templates are provided in the "
+            "injected function registry for each tool." + chr(10)
+        )
         server_names = []
         for server in self.servers:
             if not server_name or server.name == server_name:
@@ -1158,40 +1166,18 @@ class MCPConfig(BaseModel):
             raise ValueError(f"Server {server_name} not found")
 
         for server in self.servers:
-            if server.name in server_names:
-                server_name = server.name
-                prompt += f"### {server_name}\n"
-                prompt += f"{server.description}\n"
-                tools = server.get_tools()
-
-                for tool in tools:
-                    prompt += (
-                        f"\n### {server_name}.{tool['name']}:\n"
-                        f"{tool['description']}\n\n"
-                        # f"#### Categories:\n"
-                        # f"* kind: MCP Server Tool\n"
-                        # f'* server: "{server_name}" ({server.description})\n\n'
-                        # f"#### Arguments:\n"
-                    )
-
-                    input_schema = (
-                        json.dumps(tool["input_schema"]) if tool["input_schema"] else ""
-                    )
-
-                    prompt += f"#### Input schema for tool_args:\n{input_schema}\n"
-
-                    prompt += "\n"
-
-                    prompt += (
-                        f"#### Usage:\n"
-                        f"{{\n"
-                        # f'    "observations": ["..."],\n' # TODO: this should be a prompt file with placeholders
-                        f'    "thoughts": ["..."],\n'
-                        # f'    "reflection": ["..."],\n' # TODO: this should be a prompt file with placeholders
-                        f"    \"tool_name\": \"{server_name}.{tool['name']}\",\n"
-                        f'    "tool_args": !follow schema above\n'
-                        f"}}\n"
-                    )
+            if server.name not in server_names:
+                continue
+            prompt += chr(10) + "### " + server.name + chr(10)
+            if server.description:
+                prompt += server.description + chr(10)
+            for tool in server.get_tools():
+                tool_desc = (tool.get("description") or "").strip()
+                tool_name = server.name + "." + tool["name"]
+                if tool_desc:
+                    prompt += "- `" + tool_name + "`: " + tool_desc + chr(10)
+                else:
+                    prompt += "- `" + tool_name + "`" + chr(10)
 
         return prompt
 
