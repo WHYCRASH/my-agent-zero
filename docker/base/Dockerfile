@@ -27,8 +27,6 @@ RUN bash /ins/install_base_packages4.sh
 # install python after packages to ensure version overriding
 RUN bash /ins/install_python.sh
 
-# install searxng
-RUN bash /ins/install_searxng.sh
 
 # configure ssh
 RUN bash /ins/configure_ssh.sh

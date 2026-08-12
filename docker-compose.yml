@@ -1,0 +1,17 @@
+services:
+  agent-zero:
+    build:
+      context: .
+      dockerfile: DockerfileLocal
+    image: agent-zero:ubuntu-24.04
+    container_name: agentubuntu
+    ports:
+      - "9000:80"
+      - "2222:22"
+      - "4343:443"
+    volumes:
+      - ./usr:/a0/usr
+      - ./tmp:/a0/tmp
+    tty: true
+    stdin_open: true
+    restart: unless-stopped

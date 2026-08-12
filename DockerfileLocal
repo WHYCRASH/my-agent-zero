@@ -1,36 +1,88 @@
-# Use the pre-built base image for A0
-# FROM agent-zero-base:local
-FROM agent0ai/agent-zero-base:latest
+# Agent Zero on Ubuntu 24.04 (self-contained, no pre-built base image)
+FROM ubuntu:24.04
 
 # Set BRANCH to "local" if not provided
 ARG BRANCH=local
 ENV BRANCH=$BRANCH
+
+# Locale + timezone
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+ENV TZ=UTC
+
+# OS update/upgrade + required packages in ONE RUN block, then purge apt lists
+# so the image is not bloated.
+RUN apt-get update && apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    locales \
+    tzdata \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    curl \
+    ca-certificates \
+    build-essential \
+    ffmpeg \
+    supervisor \
+    nodejs \
+    npm \
+    tesseract-ocr \
+    tesseract-ocr-script-latn \
+    poppler-utils \
+    unzip \
+    p7zip-full \
+    openssh-server \
+    cron \
+    sudo \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Locale setup (uses locales/tzdata installed above)
+RUN sed -i -e 's/# \(en_US\.UTF-8 .*\)/\1/' /etc/locale.gen && \
+    dpkg-reconfigure --frontend=noninteractive locales && \
+    update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 && \
+    ln -sf /usr/share/zoneinfo/UTC /etc/localtime && \
+    echo "UTC" > /etc/timezone && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# Preserve the dual-venv layout used by A0:
+#   /opt/venv    - default agent/user runtime
+#   /opt/venv-a0 - A0 framework runtime (activated by /ins/setup_venv.sh)
+# Ubuntu 24.04 ships Python 3.12, so both venvs use the system interpreter.
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip pipx ipython requests && \
+    python3 -m venv /opt/venv-a0 && \
+    /opt/venv-a0/bin/pip install --no-cache-dir --upgrade pip pipx && \
+    /opt/venv-a0/bin/pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 \
+        --index-url https://download.pytorch.org/whl/cpu && \
+    /opt/venv-a0/bin/pip cache purge
+
+# UV (installed after the apt lists cleanup, per requirements; used by install_A0.sh)
+RUN curl -Ls https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
 
 # Copy filesystem files to root
 COPY ./docker/run/fs/ /
 # Copy current development files to git, they will only be used in "local" branch
 COPY ./ /git/agent-zero
 
-# pre installation steps
+# pre installation steps (apt update + SSH setup)
 RUN bash /ins/pre_install.sh $BRANCH
 
-# install A0
+# install A0 (venv + uv pip install requirements, playwright + chromium, preload)
 RUN bash /ins/install_A0.sh $BRANCH
-
-# install additional software
-RUN bash /ins/install_additional.sh $BRANCH
 
 # cleanup repo and install A0 without caching, this speeds up builds
 ARG CACHE_DATE=none
 RUN echo "cache buster $CACHE_DATE" && bash /ins/install_A02.sh $BRANCH
 
-# post installation steps
+# post installation steps (apt cleanup: rm -rf /var/lib/apt/lists/*, apt-get clean)
 RUN bash /ins/post_install.sh $BRANCH
 
 # Expose ports
-EXPOSE 22 80 9000-9009
+EXPOSE 22 80 443
 
-RUN chmod +x /exe/initialize.sh /exe/run_A0.sh /exe/run_searxng.sh /exe/run_tunnel_api.sh
+RUN chmod +x /exe/initialize.sh /exe/run_A0.sh /exe/run_tunnel_api.sh
 
 # initialize runtime and switch to supervisord
 CMD ["/exe/initialize.sh", "$BRANCH"]

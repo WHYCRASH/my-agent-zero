@@ -3,7 +3,7 @@
 ## Purpose
 
 - Own the Agent Zero base image build context.
-- Build the operating system, package, Python, SearXNG, SSH, and bootstrap layers reused by runnable images.
+- Build the operating system, package, Python, SSH, and bootstrap layers reused by runnable images.
 
 ## Ownership
 
